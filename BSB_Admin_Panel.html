@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BSB Battle Pass — Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --gold: #C9A84C;
+  --gold-light: #E8C96A;
+  --gold-dim: rgba(201,168,76,0.15);
+  --black: #080808;
+  --dark: #0f0f0f;
+  --card: #131313;
+  --border: #1e1e1e;
+  --border-gold: rgba(201,168,76,0.3);
+  --text: #e8e8e8;
+  --muted: #555;
+  --green: #2E7D32;
+  --green-light: #4CAF50;
+  --red: #C62828;
+  --red-light: #EF5350;
+  --orange: #E65100;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--black);
+  color: var(--text);
+  font-family: 'Rajdhani', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ─── NOISE TEXTURE OVERLAY ─── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.4;
+}
+
+/* ─── LOGIN SCREEN ─── */
+#login-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.login-box {
+  background: var(--card);
+  border: 0.5px solid var(--border-gold);
+  border-radius: 16px;
+  padding: 3rem;
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+}
+
+.login-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 42px;
+  color: var(--gold);
+  letter-spacing: 4px;
+  margin-bottom: 4px;
+}
+
+.login-sub {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 2.5rem;
+}
+
+.login-input {
+  width: 100%;
+  background: var(--black);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  margin-bottom: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.login-input:focus { border-color: var(--gold); }
+
+.login-btn {
+  width: 100%;
+  background: var(--gold);
+  border: none;
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--black);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.login-btn:hover { background: var(--gold-light); }
+.login-btn:active { transform: scale(0.98); }
+.login-error { color: var(--red-light); font-size: 13px; margin-top: 0.5rem; }
+
+/* ─── MAIN LAYOUT ─── */
+#app { display: none; min-height: 100vh; position: relative; z-index: 1; }
+
+/* ─── HEADER ─── */
+.header {
+  background: var(--dark);
+  border-bottom: 0.5px solid var(--border-gold);
+  padding: 0 2rem;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.header-brand {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 24px;
+  color: var(--gold);
+  letter-spacing: 3px;
+}
+
+.header-badge {
+  background: var(--gold-dim);
+  border: 0.5px solid var(--border-gold);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.header-right { display: flex; align-items: center; gap: 1rem; }
+
+.logout-btn {
+  background: transparent;
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: var(--muted);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: border-color 0.2s, color 0.2s;
+}
+.logout-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ─── NAV TABS ─── */
+.nav-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 0.5px solid var(--border);
+  padding: 0 2rem;
+  background: var(--dark);
+}
+
+.nav-tab {
+  padding: 14px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+
+.nav-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+.nav-tab:hover:not(.active) { color: var(--text); }
+
+/* ─── CONTENT ─── */
+.content { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ─── STATS GRID ─── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: var(--card);
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--gold);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.stat-card:hover { border-color: var(--border-gold); }
+.stat-card:hover::before { opacity: 1; }
+
+.stat-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.stat-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 36px;
+  color: var(--gold);
+  line-height: 1;
+}
+
+.stat-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* ─── SECTION HEADER ─── */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.section-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  color: var(--text);
+  letter-spacing: 2px;
+}
+
+.section-count {
+  background: var(--gold-dim);
+  border: 0.5px solid var(--border-gold);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.refresh-btn {
+  background: transparent;
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+  display: flex; align-items: center; gap: 6px;
+}
+.refresh-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ─── SUBMISSION CARDS ─── */
+.submissions-list { display: flex; flex-direction: column; gap: 12px; }
+
+.sub-card {
+  background: var(--card);
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.sub-card:hover { border-color: var(--border-gold); }
+
+.sub-card-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 0.5px solid var(--border);
+}
+
+.sub-level {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  color: var(--black);
+  flex-shrink: 0;
+}
+
+.sub-info { flex: 1; min-width: 0; }
+
+.sub-member {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.sub-mission {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.sub-reward {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  color: var(--gold);
+  text-align: right;
+}
+
+.sub-reward-lbl { font-size: 10px; color: var(--muted); text-align: right; }
+
+.sub-card-body { padding: 1rem 1.25rem; }
+
+.sub-note {
+  background: var(--black);
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 1rem;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.sub-meta {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.sub-meta-item {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+.sub-meta-item span {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sub-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 9px 20px;
+  border-radius: 7px;
+  border: none;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: uppercase;
+}
+
+.btn-approve {
+  background: var(--green);
+  color: #fff;
+}
+.btn-approve:hover { background: var(--green-light); transform: translateY(-1px); }
+
+.btn-reject {
+  background: transparent;
+  border: 0.5px solid var(--red);
+  color: var(--red-light);
+}
+.btn-reject:hover { background: var(--red); color: #fff; transform: translateY(-1px); }
+
+.btn-more {
+  background: transparent;
+  border: 0.5px solid var(--border);
+  color: var(--muted);
+}
+.btn-more:hover { border-color: var(--gold); color: var(--gold); }
+
+.btn-gold {
+  background: var(--gold);
+  color: var(--black);
+}
+.btn-gold:hover { background: var(--gold-light); }
+
+/* ─── LEADERBOARD ─── */
+.leaderboard-table {
+  background: var(--card);
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.lb-header {
+  display: grid;
+  grid-template-columns: 60px 1fr 120px 120px 120px;
+  padding: 12px 1.25rem;
+  background: var(--black);
+  border-bottom: 0.5px solid var(--border);
+}
+
+.lb-col {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.lb-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 120px 120px 120px;
+  padding: 14px 1.25rem;
+  border-bottom: 0.5px solid var(--border);
+  align-items: center;
+  transition: background 0.15s;
+}
+
+.lb-row:last-child { border-bottom: none; }
+.lb-row:hover { background: rgba(201,168,76,0.04); }
+
+.lb-pos {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  color: var(--muted);
+}
+
+.lb-pos.gold { color: #FFD700; }
+.lb-pos.silver { color: #C0C0C0; }
+.lb-pos.bronze { color: #CD7F32; }
+
+.lb-name { font-size: 15px; font-weight: 600; color: var(--text); }
+.lb-username { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+.lb-level {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 26px;
+  color: var(--gold);
+}
+
+.lb-earned { font-size: 14px; font-weight: 700; color: var(--green-light); }
+
+.rank-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.rank-RECRUE { background: #1a1a1a; color: #666; }
+.rank-AGENT { background: #1a2a1a; color: var(--green-light); }
+.rank-ÉLITE { background: #1a1a2a; color: #7B8CDE; }
+.rank-LÉGENDAIRE { background: #2a1a00; color: var(--gold); }
+
+/* ─── MODAL ─── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+  backdrop-filter: blur(4px);
+  padding: 1rem;
+}
+
+.modal-box {
+  background: var(--card);
+  border: 0.5px solid var(--border-gold);
+  border-radius: 14px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 480px;
+}
+
+.modal-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 24px;
+  color: var(--gold);
+  letter-spacing: 2px;
+  margin-bottom: 1rem;
+}
+
+.modal-textarea {
+  width: 100%;
+  background: var(--black);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 100px;
+  outline: none;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s;
+}
+
+.modal-textarea:focus { border-color: var(--gold); }
+
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ─── EMPTY STATE ─── */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--muted);
+}
+
+.empty-icon { font-size: 48px; margin-bottom: 1rem; opacity: 0.5; }
+.empty-text { font-size: 16px; letter-spacing: 1px; }
+
+/* ─── TOAST ─── */
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: var(--card);
+  border: 0.5px solid var(--border-gold);
+  border-radius: 10px;
+  padding: 14px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: slideIn 0.3s ease;
+  max-width: 320px;
+}
+
+.toast.success { border-color: var(--green-light); color: var(--green-light); }
+.toast.error { border-color: var(--red-light); color: var(--red-light); }
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ─── LOADING ─── */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: var(--muted);
+  font-size: 14px;
+  letter-spacing: 2px;
+  gap: 10px;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── MEMBERS TABLE ─── */
+.members-table {
+  background: var(--card);
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.members-header {
+  display: grid;
+  grid-template-columns: 1fr 100px 120px 120px 100px;
+  padding: 12px 1.25rem;
+  background: var(--black);
+  border-bottom: 0.5px solid var(--border);
+}
+
+.members-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 120px 120px 100px;
+  padding: 12px 1.25rem;
+  border-bottom: 0.5px solid var(--border);
+  align-items: center;
+  transition: background 0.15s;
+}
+
+.members-row:last-child { border-bottom: none; }
+.members-row:hover { background: rgba(201,168,76,0.04); }
+
+.ban-btn {
+  background: transparent;
+  border: 0.5px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ban-btn:hover { border-color: var(--red); color: var(--red-light); }
+.ban-btn.banned { border-color: var(--red); color: var(--red-light); }
+
+@media (max-width: 768px) {
+  .content { padding: 1rem; }
+  .header { padding: 0 1rem; }
+  .nav-tabs { padding: 0 1rem; overflow-x: auto; }
+  .lb-header, .lb-row { grid-template-columns: 40px 1fr 80px 80px; }
+  .lb-row > *:last-child { display: none; }
+  .members-header, .members-row { grid-template-columns: 1fr 80px 80px; }
+  .members-row > *:nth-child(4), .members-row > *:nth-child(5) { display: none; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-title">LA BRINK'S</div>
+    <div class="login-sub">BSB Battle Pass — Admin Panel</div>
+    <input type="password" class="login-input" id="pwd-input" placeholder="Mot de passe admin..." />
+    <button class="login-btn" onclick="checkLogin()">ACCÉDER</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header class="header">
+    <div class="header-brand">LA BRINK'S</div>
+    <div class="header-right">
+      <div class="header-badge">Admin — Saison 1</div>
+      <button class="logout-btn" onclick="logout()">Déconnexion</button>
+    </div>
+  </header>
+
+  <nav class="nav-tabs">
+    <div class="nav-tab active" onclick="switchTab('dashboard')">Dashboard</div>
+    <div class="nav-tab" onclick="switchTab('submissions')">Soumissions <span id="pending-count-nav"></span></div>
+    <div class="nav-tab" onclick="switchTab('leaderboard')">Classement</div>
+    <div class="nav-tab" onclick="switchTab('members')">Membres</div>
+  </nav>
+
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="tab-panel active" id="tab-dashboard">
+      <div class="stats-grid" id="stats-grid">
+        <div class="loading"><div class="spinner"></div> Chargement...</div>
+      </div>
+
+      <div class="section-header">
+        <div class="section-title">Dernières soumissions</div>
+        <button class="refresh-btn" onclick="loadAll()">↻ Actualiser</button>
+      </div>
+      <div id="dashboard-submissions"></div>
+    </div>
+
+    <!-- SUBMISSIONS -->
+    <div class="tab-panel" id="tab-submissions">
+      <div class="section-header">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="section-title">Soumissions en attente</div>
+          <div class="section-count" id="pending-count">0</div>
+        </div>
+        <button class="refresh-btn" onclick="loadSubmissions()">↻ Actualiser</button>
+      </div>
+      <div class="submissions-list" id="submissions-list">
+        <div class="loading"><div class="spinner"></div> Chargement...</div>
+      </div>
+    </div>
+
+    <!-- LEADERBOARD -->
+    <div class="tab-panel" id="tab-leaderboard">
+      <div class="section-header">
+        <div class="section-title">Classement membres</div>
+        <button class="refresh-btn" onclick="loadLeaderboard()">↻ Actualiser</button>
+      </div>
+      <div class="leaderboard-table">
+        <div class="lb-header">
+          <div class="lb-col">Pos.</div>
+          <div class="lb-col">Membre</div>
+          <div class="lb-col">Niveau</div>
+          <div class="lb-col">Gagné</div>
+          <div class="lb-col">Rang</div>
+        </div>
+        <div id="leaderboard-body">
+          <div class="loading"><div class="spinner"></div> Chargement...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MEMBERS -->
+    <div class="tab-panel" id="tab-members">
+      <div class="section-header">
+        <div class="section-title">Tous les membres</div>
+        <button class="refresh-btn" onclick="loadMembers()">↻ Actualiser</button>
+      </div>
+      <div class="members-table">
+        <div class="members-header">
+          <div class="lb-col">Membre</div>
+          <div class="lb-col">Niveau</div>
+          <div class="lb-col">Rang</div>
+          <div class="lb-col">Inscrit le</div>
+          <div class="lb-col">Action</div>
+        </div>
+        <div id="members-body">
+          <div class="loading"><div class="spinner"></div> Chargement...</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL REJET -->
+<div class="modal-overlay" id="reject-modal" style="display:none" onclick="closeModal(event)">
+  <div class="modal-box">
+    <div class="modal-title">Rejeter la soumission</div>
+    <textarea class="modal-textarea" id="reject-reason" placeholder="Raison du rejet (sera envoyée au membre)..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-more" onclick="document.getElementById('reject-modal').style.display='none'">Annuler</button>
+      <button class="btn btn-reject" onclick="confirmReject()">Confirmer le rejet</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────
+const SUPABASE_URL = 'https://oposznquldsgndbqkbfw.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wb3N6bnF1bGRzZ25kYnFrYmZ3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTA0NTUwOCwiZXhwIjoyMDk0NjIxNTA4fQ.Yov62tnRTf8GNWcaNRUcsrFHiHcX9sTiFLaRPJFbWug';
+const ADMIN_PASSWORD = 'LABRINKS2025'; // Change ce mot de passe !
+
+const MISSIONS = {
+  1: { name: 'Like & commentaire Instagram', reward: 'Vidéo exclusive' },
+  2: { name: 'Abonnements réseaux sociaux', reward: 'Porte-clé BSB' },
+  3: { name: 'Repost Reel en story Instagram', reward: '10 $ USDT' },
+  4: { name: 'Inviter 7 personnes sur LA BRINK\'S', reward: '5 €' },
+  5: { name: 'Preuve de gains du jour', reward: '15 $ USDT' },
+  6: { name: 'Liker, commenter & partager à 20', reward: '300 $ USDT' },
+  7: { name: 'VIP ou 1 membre — dépôt 450€', reward: '50 $ USDT' },
+  8: { name: '1 client dépôt 1 000€', reward: '100 $ USDT' },
+  9: { name: '2 clients dépôt 1 000€ chacun', reward: '250 $ USDT' },
+  10: { name: '5 clients dépôt 1 000€ chacun', reward: '600 $ USDT' },
+};
+
+let supabase;
+let currentRejectId = null;
+let currentRejectMemberId = null;
+let currentRejectMissionId = null;
+
+// ─── LOGIN ────────────────────────────────────────────────────
+function checkLogin() {
+  const pwd = document.getElementById('pwd-input').value;
+  if (pwd === ADMIN_PASSWORD) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initSupabase();
+    loadAll();
+  } else {
+    document.getElementById('login-error').textContent = 'Mot de passe incorrect.';
+    document.getElementById('pwd-input').value = '';
+  }
+}
+
+document.getElementById('pwd-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') checkLogin();
+});
+
+function logout() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('pwd-input').value = '';
+}
+
+// ─── SUPABASE ─────────────────────────────────────────────────
+function initSupabase() {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+}
+
+// ─── TABS ─────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  event.target.classList.add('active');
+
+  if (tab === 'submissions') loadSubmissions();
+  if (tab === 'leaderboard') loadLeaderboard();
+  if (tab === 'members') loadMembers();
+}
+
+// ─── LOAD ALL ─────────────────────────────────────────────────
+async function loadAll() {
+  await Promise.all([loadStats(), loadDashboardSubmissions()]);
+}
+
+// ─── STATS ────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const { data } = await supabase.from('admin_season_stats').select('*').single();
+    if (!data) return;
+
+    document.getElementById('stats-grid').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-label">Membres total</div>
+        <div class="stat-value">${data.total_members || 0}</div>
+        <div class="stat-sub">inscrits au Battle Pass</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">En attente</div>
+        <div class="stat-value" style="color:var(--orange)">${data.pending_submissions || 0}</div>
+        <div class="stat-sub">soumissions à valider</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Validées</div>
+        <div class="stat-value" style="color:var(--green-light)">${data.approved_submissions || 0}</div>
+        <div class="stat-sub">missions approuvées</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total versé</div>
+        <div class="stat-value">${data.total_paid_usd || 0}$</div>
+        <div class="stat-sub">USDT distribués</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Membres élite</div>
+        <div class="stat-value">${data.elite_members || 0}</div>
+        <div class="stat-sub">niveau 7+</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Légendaires</div>
+        <div class="stat-value" style="color:var(--gold-light)">${data.legendary_members || 0}</div>
+        <div class="stat-sub">niveau 10</div>
+      </div>
+    `;
+
+    const pending = data.pending_submissions || 0;
+    document.getElementById('pending-count').textContent = pending;
+    document.getElementById('pending-count-nav').textContent = pending > 0 ? `(${pending})` : '';
+  } catch (e) {
+    console.error('Stats error:', e);
+  }
+}
+
+// ─── SUBMISSIONS ──────────────────────────────────────────────
+async function loadDashboardSubmissions() {
+  const el = document.getElementById('dashboard-submissions');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
+  try {
+    const subs = await fetchSubmissions();
+    el.innerHTML = renderSubmissions(subs.slice(0, 5), true);
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-text">Erreur de chargement</div></div>';
+  }
+}
+
+async function loadSubmissions() {
+  const el = document.getElementById('submissions-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
+  try {
+    const subs = await fetchSubmissions();
+    document.getElementById('pending-count').textContent = subs.length;
+    el.innerHTML = renderSubmissions(subs, false);
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-text">Erreur de chargement</div></div>';
+  }
+}
+
+async function fetchSubmissions() {
+  const { data, error } = await supabase
+    .from('submissions')
+    .select('*, members(telegram_username, first_name, telegram_id)')
+    .eq('status', 'pending')
+    .order('submitted_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+function renderSubmissions(subs, compact) {
+  if (subs.length === 0) {
+    return '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">Aucune soumission en attente</div></div>';
+  }
+
+  return '<div class="submissions-list">' + subs.map(sub => {
+    const m = MISSIONS[sub.mission_id] || {};
+    const member = sub.members || {};
+    const date = new Date(sub.submitted_at).toLocaleString('fr-FR');
+
+    return `
+      <div class="sub-card" id="sub-${sub.id}">
+        <div class="sub-card-header">
+          <div class="sub-level">${sub.mission_id}</div>
+          <div class="sub-info">
+            <div class="sub-member">@${member.telegram_username || member.first_name || 'inconnu'}</div>
+            <div class="sub-mission">${m.name || 'Mission ' + sub.mission_id} • Tentative #${sub.attempt || 1}</div>
+          </div>
+          <div>
+            <div class="sub-reward">${m.reward || '—'}</div>
+            <div class="sub-reward-lbl">récompense</div>
+          </div>
+        </div>
+        <div class="sub-card-body">
+          ${sub.note ? `<div class="sub-note">💬 "${sub.note}"</div>` : ''}
+          <div class="sub-meta">
+            <div class="sub-meta-item">Telegram ID: <span>${member.telegram_id || '—'}</span></div>
+            <div class="sub-meta-item">Soumis le: <span>${date}</span></div>
+            <div class="sub-meta-item">Fichiers: <span>${sub.file_urls ? sub.file_urls.length + ' fichier(s)' : sub.file_url ? '1 fichier' : 'Aucun'}</span></div>
+          </div>
+          <div class="sub-actions">
+            <button class="btn btn-approve" onclick="approveSubmission('${sub.id}', '${sub.member_id}', ${sub.mission_id})">✓ Valider</button>
+            <button class="btn btn-reject" onclick="openRejectModal('${sub.id}', '${sub.member_id}', ${sub.mission_id})">✕ Rejeter</button>
+            <button class="btn btn-more" onclick="requestMore('${sub.id}')">+ Demander plus</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('') + '</div>';
+}
+
+// ─── APPROVE ──────────────────────────────────────────────────
+async function approveSubmission(subId, memberId, missionId) {
+  try {
+    // 1. Approuver la soumission
+    await supabase.from('submissions').update({
+      status: 'approved',
+      reviewed_by: 'admin',
+      reviewed_at: new Date().toISOString()
+    }).eq('id', subId);
+
+    // 2. Débloquer la mission suivante
+    await supabase.rpc('unlock_next_mission', {
+      p_member_id: memberId,
+      p_mission_id: missionId
+    });
+
+    // 3. Créer la récompense
+    const m = MISSIONS[missionId];
+    const rewardType = missionId === 2 ? 'physical' : missionId === 1 ? 'content' : 'usdt';
+    const amount = parseFloat((m?.reward || '0').replace(/[^0-9.]/g, '')) || null;
+    await supabase.from('rewards').insert({
+      member_id: memberId,
+      mission_id: missionId,
+      reward_type: rewardType,
+      amount: amount,
+      currency: m?.reward?.includes('€') ? 'EUR' : 'USD',
+      description: m?.reward,
+      status: 'pending'
+    });
+
+    // 4. Logger
+    await supabase.from('admin_logs').insert({
+      admin_name: 'admin_panel',
+      action: 'validate',
+      target_type: 'submission',
+      target_id: subId,
+      details: `Mission ${missionId} validée`
+    });
+
+    // 5. Retirer la carte
+    const card = document.getElementById(`sub-${subId}`);
+    if (card) {
+      card.style.opacity = '0';
+      card.style.transform = 'translateX(100%)';
+      card.style.transition = 'all 0.3s';
+      setTimeout(() => { card.remove(); loadStats(); }, 300);
+    }
+
+    showToast('✅ Mission validée ! Récompense créée.', 'success');
+  } catch(e) {
+    console.error(e);
+    showToast('❌ Erreur lors de la validation', 'error');
+  }
+}
+
+// ─── REJECT ───────────────────────────────────────────────────
+function openRejectModal(subId, memberId, missionId) {
+  currentRejectId = subId;
+  currentRejectMemberId = memberId;
+  currentRejectMissionId = missionId;
+  document.getElementById('reject-reason').value = '';
+  document.getElementById('reject-modal').style.display = 'flex';
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('reject-modal')) {
+    document.getElementById('reject-modal').style.display = 'none';
+  }
+}
+
+async function confirmReject() {
+  const reason = document.getElementById('reject-reason').value || 'Preuve non conforme.';
+  try {
+    await supabase.from('submissions').update({
+      status: 'rejected',
+      reviewed_by: 'admin',
+      reviewed_at: new Date().toISOString(),
+      admin_note: reason
+    }).eq('id', currentRejectId);
+
+    // Remettre la mission en active
+    await supabase.from('mission_status').update({
+      status: 'active',
+      submitted_at: null
+    }).eq('member_id', currentRejectMemberId).eq('mission_id', currentRejectMissionId);
+
+    await supabase.from('admin_logs').insert({
+      admin_name: 'admin_panel',
+      action: 'reject',
+      target_type: 'submission',
+      target_id: currentRejectId,
+      details: `Mission ${currentRejectMissionId} rejetée: ${reason}`
+    });
+
+    const card = document.getElementById(`sub-${currentRejectId}`);
+    if (card) {
+      card.style.opacity = '0';
+      card.style.transition = 'opacity 0.3s';
+      setTimeout(() => { card.remove(); loadStats(); }, 300);
+    }
+
+    document.getElementById('reject-modal').style.display = 'none';
+    showToast('❌ Soumission rejetée. Membre notifié.', 'error');
+  } catch(e) {
+    console.error(e);
+    showToast('Erreur lors du rejet', 'error');
+  }
+}
+
+async function requestMore(subId) {
+  await supabase.from('submissions').update({ status: 'needs_more' }).eq('id', subId);
+  const card = document.getElementById(`sub-${subId}`);
+  if (card) { card.style.opacity = '0.5'; }
+  showToast('ℹ️ Demande de complément envoyée.', 'success');
+}
+
+// ─── LEADERBOARD ──────────────────────────────────────────────
+async function loadLeaderboard() {
+  const el = document.getElementById('leaderboard-body');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try {
+    const { data } = await supabase.from('admin_leaderboard').select('*').limit(50);
+    const medals = ['gold', 'silver', 'bronze'];
+    el.innerHTML = (data || []).map((m, i) => `
+      <div class="lb-row">
+        <div class="lb-pos ${medals[i] || ''}">${i + 1}</div>
+        <div>
+          <div class="lb-name">${m.first_name || '—'}</div>
+          <div class="lb-username">@${m.telegram_username || '—'}</div>
+        </div>
+        <div class="lb-level">${m.current_level}<span style="font-size:14px;color:var(--muted)">/10</span></div>
+        <div class="lb-earned">${m.total_earned || 0} $</div>
+        <div><span class="rank-chip rank-${m.rank || 'RECRUE'}">${m.rank || 'RECRUE'}</span></div>
+      </div>
+    `).join('') || '<div class="empty-state"><div class="empty-text">Aucun membre</div></div>';
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-text">Erreur</div></div>';
+  }
+}
+
+// ─── MEMBERS ──────────────────────────────────────────────────
+async function loadMembers() {
+  const el = document.getElementById('members-body');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try {
+    const { data } = await supabase.from('members').select('*').order('joined_at', { ascending: false }).limit(100);
+    el.innerHTML = (data || []).map(m => `
+      <div class="members-row">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text)">@${m.telegram_username || m.first_name || '—'}</div>
+          <div style="font-size:11px;color:var(--muted)">ID: ${m.telegram_id}</div>
+        </div>
+        <div class="lb-level">${m.current_level}<span style="font-size:12px;color:var(--muted)">/10</span></div>
+        <div><span class="rank-chip rank-${m.rank || 'RECRUE'}">${m.rank || 'RECRUE'}</span></div>
+        <div style="font-size:12px;color:var(--muted)">${new Date(m.joined_at).toLocaleDateString('fr-FR')}</div>
+        <div>
+          <button class="ban-btn ${m.is_banned ? 'banned' : ''}" onclick="toggleBan('${m.id}', ${m.is_banned})">
+            ${m.is_banned ? 'Banni' : 'Bannir'}
+          </button>
+        </div>
+      </div>
+    `).join('') || '<div class="empty-state"><div class="empty-text">Aucun membre</div></div>';
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-text">Erreur</div></div>';
+  }
+}
+
+async function toggleBan(memberId, isBanned) {
+  await supabase.from('members').update({
+    is_banned: !isBanned,
+    ban_reason: !isBanned ? 'Ban depuis le panel admin' : null
+  }).eq('id', memberId);
+  loadMembers();
+  showToast(isBanned ? '✅ Membre débanni' : '🚫 Membre banni', isBanned ? 'success' : 'error');
+}
+
+// ─── TOAST ────────────────────────────────────────────────────
+function showToast(message, type = '') {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+</script>
+</body>
+</html>
